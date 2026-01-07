@@ -1,5 +1,6 @@
-# Streamlit APP 命令仓库
+# Streamlit APP 命令窗口
 
-frok到自己仓库
+frok本仓库到你自己仓库
 
-登陆https://share.streamlit.io/ ，新建APP，选择github刚才frok的仓库，然后部署就可以
+登陆https://share.streamlit.io/ ，选择carete app→Deploy a public app from GitHub→选择 Fork 后的仓库，然后部署就可以
+
