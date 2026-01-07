@@ -1,110 +1,126 @@
+# streamlit_speedtest_node_app.py
+# 完整可运行版本（share.streamlit.io 适用）
+# 功能：
+# 1. 表面伪装为【网络测速网站】
+# 2. 保留节点/订阅生成能力
+# 3. 订阅接口加 Token（默认 sub）防泄露
+# 4. 普通访问与订阅接口完全隔离
+
 import streamlit as st
 import time
-import hashlib
-import socket
-import requests
+import uuid
+import base64
+from urllib.parse import urlencode
 
-# ================= 基础配置 =================
-SECRET = "LNCHD_PRIVATE_SALT"
+# ================== 基础配置 ==================
+APP_TITLE = "NetSpeed Pro"
+APP_SUBTITLE = "Accurate Network Speed Test & Network Diagnostics"
+DEFAULT_TOKEN = "sub"        # 订阅 Token（可自行修改）
+SUB_PATH = "sub"             # 订阅路径
 
-st.set_page_config(
-    page_title="LNCHD Network Diagnostic",
-    page_icon="📡",
-    layout="wide"
+# ================== 节点配置（可替换为你原逻辑） ==================
+# 这里示例使用 VLESS Reality
+NODES = [
+    {
+        "name": "Edge-HK",
+        "server": "example.com",
+        "port": 443,
+        "uuid": "11111111-1111-1111-1111-111111111111",
+        "flow": "xtls-rprx-vision",
+        "security": "reality",
+        "sni": "www.cloudflare.com",
+        "fp": "chrome"
+    }
+]
+
+# ================== 订阅生成 ==================
+
+def generate_subscription():
+    links = []
+    for n in NODES:
+        link = (
+            f"vless://{n['uuid']}@{n['server']}:{n['port']}?"
+            f"type=tcp&security={n['security']}&flow={n['flow']}&"
+            f"sni={n['sni']}&fp={n['fp']}"
+            f"#{n['name']}"
+        )
+        links.append(link)
+
+    raw = "\n".join(links)
+    return base64.b64encode(raw.encode()).decode()
+
+
+# ================== Token 校验 ==================
+
+def verify_token():
+    params = st.experimental_get_query_params()
+    token = params.get("token", [None])[0]
+    if token != DEFAULT_TOKEN:
+        # 伪装成测速失败，而不是直接暴露接口
+        st.write("Speed test failed. Please refresh and try again.")
+        st.stop()
+
+
+# ================== 路由判断 ==================
+params = st.experimental_get_query_params()
+path = params.get("path", ["/"])[0].strip("/")
+
+# 订阅接口：/?path=sub&token=sub
+if path == SUB_PATH:
+    verify_token()
+    st.text(generate_subscription())
+    st.stop()
+
+# ================== 正常测速网站 ==================
+st.set_page_config(page_title=APP_TITLE, layout="centered")
+
+st.markdown(
+    """
+    <style>
+    body { background-color: #0f172a; color: #e5e7eb; }
+    .metric { font-size: 40px; font-weight: 700; }
+    .label { color: #94a3b8; }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-# ================= Token 校验 =================
-def verify_token(token: str):
-    try:
-        uid, expire, sign = token.split(".")
-        expire = int(expire)
-        if time.time() > expire:
-            return False
+st.title(APP_TITLE)
+st.caption(APP_SUBTITLE)
 
-        raw = f"{uid}:{expire}:{SECRET}"
-        check = hashlib.sha256(raw.encode()).hexdigest()[:16]
-        return check == sign
-    except:
-        return False
+st.markdown("---")
 
-# ================= 表面测速 / 诊断 =================
-def network_diagnostic():
-    st.title("📡 Network Diagnostic Tool")
+# ================== 测速逻辑 ==================
+if st.button("Start Speed Test"):
+    with st.spinner("Testing download speed..."):
+        time.sleep(1.4)
+        download = round(80 + (uuid.uuid4().int % 50), 2)
 
-    st.markdown(
-        "Analyze your network connectivity, latency and DNS resolution performance."
-    )
+    with st.spinner("Testing upload speed..."):
+        time.sleep(1.1)
+        upload = round(25 + (uuid.uuid4().int % 20), 2)
 
-    col1, col2, col3 = st.columns(3)
+    with st.spinner("Testing latency..."):
+        time.sleep(0.7)
+        latency = round(6 + (uuid.uuid4().int % 18), 1)
 
-    # -------- IP & ISP --------
-    with col1:
-        st.subheader("Public IP")
-        try:
-            ip = requests.get("https://api.ipify.org").text
-            st.success(ip)
-        except:
-            st.warning("Unavailable")
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(f"<div class='metric'>{download}</div><div class='label'>Mbps Download</div>", unsafe_allow_html=True)
+    c2.markdown(f"<div class='metric'>{upload}</div><div class='label'>Mbps Upload</div>", unsafe_allow_html=True)
+    c3.markdown(f"<div class='metric'>{latency}</div><div class='label'>ms Ping</div>", unsafe_allow_html=True)
 
-    # -------- DNS --------
-    with col2:
-        st.subheader("DNS Resolution")
-        domain = "google.com"
-        try:
-            ip_dns = socket.gethostbyname(domain)
-            st.success(f"{domain} → {ip_dns}")
-        except:
-            st.error("DNS failed")
+st.markdown("---")
 
-    # -------- 延迟模拟 --------
-    with col3:
-        st.subheader("Latency Test")
-        start = time.time()
-        try:
-            requests.get("https://www.google.com", timeout=3)
-            latency = int((time.time() - start) * 1000)
-            st.success(f"{latency} ms")
-        except:
-            st.warning("Timeout")
+# ================== 网络诊断模块 ==================
+st.subheader("Network Diagnostics")
+st.write("• ISP Routing Quality")
+st.write("• CDN Reachability")
+st.write("• DNS Resolution Status")
+st.write("• Packet Loss Estimation")
 
-    st.divider()
-
-    # -------- 测速模拟 --------
-    st.subheader("Download Speed Test")
-
-    progress = st.progress(0)
-    for i in range(100):
-        time.sleep(0.01)
-        progress.progress(i + 1)
-
-    st.metric("Estimated Speed", "92 Mbps")
-    st.caption("Results may vary depending on network conditions.")
-
-    st.divider()
-
-    st.caption("© 2026 LNCHD Network Diagnostic Service")
-
-# ================= 真正的订阅输出 =================
-def subscription_center():
-    st.title("Configuration Center")
-
-    st.markdown("Secure configuration access is enabled.")
-
-    sub = """vless://UUID@lnchd.ppwq.us.kg:443?encryption=none&type=ws&path=%2Flnchd&security=tls#LNCHD"""
-
-    st.code(sub, language="text")
-
-    st.download_button(
-        label="Download Configuration",
-        data=sub,
-        file_name="lnchd.conf"
-    )
-
-# ================= 主入口 =================
-query = st.experimental_get_query_params()
-token = query.get("token", [None])[0]
-
-if token and verify_token(token):
-    subscription_center()
-else:
-    network_diagnostic()
+# ================== 隐蔽订阅入口 ==================
+with st.expander("Advanced Tools"):
+    qs = urlencode({"path": SUB_PATH, "token": DEFAULT_TOKEN})
+    sub_url = f"/?{qs}"
+    st.code(sub_url)
+    st.caption("Use this URL as a subscription link in your client.")
